@@ -485,7 +485,7 @@ const AudioEngine = {
   }
 };
 
-const CodeEditor = memo(({ initialValueCpp, initialValuePython, language, onRun, onReset, isVictory, onLangChange }) => {
+const CodeEditor = memo(({ initialValueCpp, initialValuePython, language, onRun, onReset, isVictory, onLangChange, canSubmit }) => {
   const [localCode, setLocalCode] = useState(language === 'cpp' ? initialValueCpp : initialValuePython);
   const textareaRef = useRef(null);
 
@@ -539,7 +539,7 @@ const CodeEditor = memo(({ initialValueCpp, initialValuePython, language, onRun,
           <button
             onClick={() => onRun(localCode, language)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-sm tracking-wide transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] active:scale-95 disabled:opacity-50"
-            disabled={isVictory}
+            disabled={isVictory || !canSubmit}
           >
             <Play className="w-4 h-4 fill-current" /> SUBMIT
           </button>
@@ -590,7 +590,17 @@ export default function App() {
   const [selectedDifficulty, setSelectedDifficulty] = useState('todos');
   const [selectedMode, setSelectedMode] = useState('mista');
   const [programSubTab, setProgramSubTab] = useState('desafios');
+  const [iniciacaoMinutes, setIniciacaoMinutes] = useState(20);
+  const [iniciacaoCustomSelected, setIniciacaoCustomSelected] = useState(false);
+  const [iniciacaoCustomMinutes, setIniciacaoCustomMinutes] = useState('');
+  const [iniciacaoCustomError, setIniciacaoCustomError] = useState('');
+  const [iniciacaoTimeLeft, setIniciacaoTimeLeft] = useState(20 * 60);
+  const [iniciacaoTimerRunning, setIniciacaoTimerRunning] = useState(false);
+  const [iniciacaoTimerAlert, setIniciacaoTimerAlert] = useState(false);
   const [competitionMinutes, setCompetitionMinutes] = useState(45);
+  const [programacaoCustomSelected, setProgramacaoCustomSelected] = useState(false);
+  const [programacaoCustomMinutes, setProgramacaoCustomMinutes] = useState('');
+  const [programacaoCustomError, setProgramacaoCustomError] = useState('');
   const [timeLeft, setTimeLeft] = useState(45 * 60);
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerAlert, setTimerAlert] = useState(false);
@@ -783,6 +793,23 @@ export default function App() {
   }, [timerRunning]);
 
   useEffect(() => {
+    if (!iniciacaoTimerRunning) return undefined;
+
+    const interval = setInterval(() => {
+      setIniciacaoTimeLeft(prev => {
+        if (prev <= 1) {
+          setIniciacaoTimerRunning(false);
+          setIniciacaoTimerAlert(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [iniciacaoTimerRunning]);
+
+  useEffect(() => {
     if (!activeRoomCode || !db) return undefined;
 
     const roomRef = doc(db, 'artifacts', appId, 'rooms', activeRoomCode);
@@ -828,8 +855,18 @@ export default function App() {
   }, [competitionMinutes]);
 
   useEffect(() => {
+    setIniciacaoTimeLeft(iniciacaoMinutes * 60);
+    setIniciacaoTimerRunning(false);
+    setIniciacaoTimerAlert(false);
+  }, [iniciacaoMinutes]);
+
+  useEffect(() => {
     setTimerAlert(timeLeft <= 60 && timeLeft > 0);
   }, [timeLeft]);
+
+  useEffect(() => {
+    setIniciacaoTimerAlert(iniciacaoTimeLeft <= 60 && iniciacaoTimeLeft > 0);
+  }, [iniciacaoTimeLeft]);
 
   const toggleAudio = () => {
     const isPlaying = AudioEngine.toggle();
@@ -879,6 +916,21 @@ export default function App() {
 
   const timerTone = timeLeft === 0 ? 'border-rose-500 bg-rose-500/10 text-rose-200' : timerAlert ? 'border-amber-500 bg-amber-500/10 text-amber-100' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100';
   const timerAccent = timeLeft === 0 ? 'text-rose-400' : timerAlert ? 'text-amber-300' : 'text-cyan-300';
+  const isTimerActive = timerRunning && timeLeft > 0;
+  const timerStateLabel = timeLeft === 0
+    ? 'Tempo esgotado — você não pode responder enquanto o cronômetro estiver parado.'
+    : timerRunning
+      ? 'Cronômetro ativo — você pode responder às questões.'
+      : 'Cronômetro pausado — retome para poder responder.';
+
+  const iniciacaoTimerTone = iniciacaoTimeLeft === 0 ? 'border-rose-500 bg-rose-500/10 text-rose-200' : iniciacaoTimerAlert ? 'border-amber-500 bg-amber-500/10 text-amber-100' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100';
+  const iniciacaoTimerAccent = iniciacaoTimeLeft === 0 ? 'text-rose-400' : iniciacaoTimerAlert ? 'text-amber-300' : 'text-cyan-300';
+  const isIniciacaoTimerActive = iniciacaoTimerRunning && iniciacaoTimeLeft > 0;
+  const iniciacaoTimerStateLabel = iniciacaoTimeLeft === 0
+    ? 'Tempo esgotado — você não pode responder enquanto o cronômetro estiver parado.'
+    : iniciacaoTimerRunning
+      ? 'Cronômetro ativo — você pode responder às perguntas.'
+      : 'Cronômetro pausado — retome para poder responder.';
 
   const createCompetitionRoom = async () => {
     const code = generateRoomCode();
@@ -1036,6 +1088,24 @@ export default function App() {
     }
   };
 
+  const startIniciacao = () => {
+    if (iniciacaoTimeLeft === 0) {
+      setIniciacaoTimeLeft(iniciacaoMinutes * 60);
+    }
+    setIniciacaoTimerRunning(true);
+    setIniciacaoTimerAlert(false);
+  };
+
+  const pauseIniciacao = () => {
+    setIniciacaoTimerRunning(false);
+  };
+
+  const resetIniciacao = () => {
+    setIniciacaoTimerRunning(false);
+    setIniciacaoTimeLeft(iniciacaoMinutes * 60);
+    setIniciacaoTimerAlert(false);
+  };
+
   const saveRecord = (player, score, room) => {
     setRecords((prev) => {
       const next = [
@@ -1061,6 +1131,11 @@ export default function App() {
   const currentLevel = LEVELS.find(l => l.id === currentLevelId) || LEVELS[0];
 
   const handleRunCode = (code, lang) => {
+    if (!isTimerActive) {
+      addTerminalLine('O cronômetro está pausado ou zerado. Retome o tempo para enviar código.', 'error');
+      return;
+    }
+
     setTerminalOutput([]);
     setShowRoast(null);
     setIsVictory(false);
@@ -1304,6 +1379,89 @@ export default function App() {
               </div>
             </div>
 
+            <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+                <div>
+                  <div className="text-xs font-mono uppercase text-cyan-300 mb-2">Tempo para responder as perguntas</div>
+                  <div className="text-3xl font-black text-white">{formatTime(iniciacaoTimeLeft)}</div>
+                  <div className="text-xs uppercase tracking-[0.15em] mt-1 text-slate-400">{iniciacaoTimerStateLabel}</div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
+                  <button onClick={startIniciacao} className="w-full py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs">Iniciar</button>
+                  <button onClick={pauseIniciacao} className="w-full py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Pausar</button>
+                  <button onClick={resetIniciacao} className="w-full py-2 rounded-xl bg-rose-500 text-white font-bold text-xs">Reset</button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {[10, 15, 20, 25].map((minutes) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      onClick={() => {
+                        setIniciacaoMinutes(minutes);
+                        setIniciacaoCustomSelected(false);
+                        setIniciacaoCustomMinutes('');
+                        setIniciacaoCustomError('');
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${iniciacaoMinutes === minutes ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 text-slate-300 hover:border-cyan-500'}`}
+                    >
+                      {minutes} min
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setIniciacaoCustomSelected((prev) => !prev)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${iniciacaoCustomSelected ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 text-slate-300 hover:border-cyan-500'}`}
+                  >
+                    Personalizado
+                  </button>
+                </div>
+                {iniciacaoCustomSelected && (
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={iniciacaoCustomMinutes}
+                      onChange={(e) => {
+                        setIniciacaoCustomMinutes(e.target.value);
+                        setIniciacaoCustomError('');
+                      }}
+                      placeholder="Tempo personalizado (min)"
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const minutes = Number(iniciacaoCustomMinutes);
+                        if (!Number.isInteger(minutes) || minutes <= 0) {
+                          setIniciacaoCustomError('Digite um número inteiro positivo.');
+                          return;
+                        }
+                        setIniciacaoMinutes(minutes);
+                        setIniciacaoCustomMinutes('');
+                        setIniciacaoCustomSelected(false);
+                      }}
+                      className="py-2 rounded-xl bg-slate-800 text-slate-200 font-bold text-xs border border-slate-700 hover:bg-slate-700"
+                    >
+                      Definir
+                    </button>
+                  </div>
+                )}
+                {iniciacaoCustomError && (
+                  <div className="text-rose-300 text-xs">{iniciacaoCustomError}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-300">
+              {isIniciacaoTimerActive
+                ? `O cronômetro está ativo. Você tem ${formatTime(iniciacaoTimeLeft)} para responder todas as perguntas.`
+                : 'Inicie o cronômetro para começar a responder. Enquanto estiver pausado ou zerado, as alternativas não podem ser selecionadas.'}
+            </div>
+
             <div className="mb-4 flex flex-wrap gap-3">
               {[1, 2].map((year) => (
                 <button
@@ -1356,8 +1514,12 @@ export default function App() {
                         return (
                           <button
                             key={optIdx}
-                            onClick={() => setSelectedIniciacaoAnswers(prev => ({ ...prev, [q.id]: `${q.id}-${optIdx}` }))}
-                            className={`p-4 rounded-xl border text-left font-mono text-sm transition-all ${optionClassName}`}
+                            onClick={() => {
+                              if (!isIniciacaoTimerActive) return;
+                              setSelectedIniciacaoAnswers(prev => ({ ...prev, [q.id]: `${q.id}-${optIdx}` }));
+                            }}
+                            disabled={!isIniciacaoTimerActive}
+                            className={`p-4 rounded-xl border text-left font-mono text-sm transition-all ${optionClassName} ${!isIniciacaoTimerActive ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             {opt}
                           </button>
@@ -1369,6 +1531,11 @@ export default function App() {
                       <div className={`mt-4 p-4 rounded-xl border text-sm ${isCorrectAnswer ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200' : 'bg-rose-950/20 border-rose-500/30 text-rose-200'}`}>
                         <p className="font-bold mb-1">{isCorrectAnswer ? 'Resposta correta!' : 'Resposta registrada.'}</p>
                         <p>{q.explanation}</p>
+                      </div>
+                    )}
+                    {!isIniciacaoTimerActive && (
+                      <div className="mt-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-sm text-slate-400">
+                        O cronômetro está pausado ou zerado. Retome o tempo para responder a esta questão.
                       </div>
                     )}
                   </div>
@@ -1544,16 +1711,65 @@ export default function App() {
                       </div>
                     )}
 
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {[15, 30, 45, 60].map((minutes) => (
+                    <div className="space-y-3 mb-3">
+                      <div className="flex flex-wrap gap-2">
+                        {[15, 30, 45, 60].map((minutes) => (
+                          <button
+                            key={minutes}
+                            onClick={() => {
+                              setCompetitionMinutes(minutes);
+                              setProgramacaoCustomSelected(false);
+                              setProgramacaoCustomMinutes('');
+                              setProgramacaoCustomError('');
+                            }}
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${competitionMinutes === minutes ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 text-slate-300 hover:border-cyan-500'}`}
+                          >
+                            {minutes} min
+                          </button>
+                        ))}
                         <button
-                          key={minutes}
-                          onClick={() => setCompetitionMinutes(minutes)}
-                          className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${competitionMinutes === minutes ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 text-slate-300 hover:border-cyan-500'}`}
+                          type="button"
+                          onClick={() => setProgramacaoCustomSelected((prev) => !prev)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${programacaoCustomSelected ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 text-slate-300 hover:border-cyan-500'}`}
                         >
-                          {minutes} min
+                          Personalizado
                         </button>
-                      ))}
+                      </div>
+                      {programacaoCustomSelected && (
+                        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={programacaoCustomMinutes}
+                            onChange={(e) => {
+                              setProgramacaoCustomMinutes(e.target.value);
+                              setProgramacaoCustomError('');
+                            }}
+                            placeholder="Tempo personalizado (min)"
+                            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const minutes = Number(programacaoCustomMinutes);
+                              if (!Number.isInteger(minutes) || minutes <= 0) {
+                                setProgramacaoCustomError('Digite um número inteiro positivo.');
+                                return;
+                              }
+                              setCompetitionMinutes(minutes);
+                              setProgramacaoCustomMinutes('');
+                              setProgramacaoCustomSelected(false);
+                            }}
+                            className="py-2 rounded-xl bg-slate-800 text-slate-200 font-bold text-xs border border-slate-700 hover:bg-slate-700"
+                          >
+                            Definir
+                          </button>
+                        </div>
+                      )}
+                      {programacaoCustomError && (
+                        <div className="text-rose-300 text-xs">{programacaoCustomError}</div>
+                      )}
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <button onClick={startCompetition} className="py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs">Iniciar</button>
@@ -1581,6 +1797,7 @@ export default function App() {
                   onRun={handleRunCode}
                   onReset={() => { setTerminalOutput([]); setShowRoast(null); setIsVictory(false); }}
                   isVictory={isVictory}
+                  canSubmit={isTimerActive}
                 />
               </div>
 
