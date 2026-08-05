@@ -871,6 +871,10 @@ export default function App() {
     { id: 'programacao', label: 'Programação' },
     { id: 'mista', label: 'Mista' }
   ];
+  const programTabOptions = [
+    { id: 'desafios', label: 'Desafios' },
+    { id: 'competicao', label: 'Competição' }
+  ];
   const formatPlayerDisplayName = (name = 'Visitante') => String(name || 'Visitante').trim() || 'Visitante';
 
   const timerTone = timeLeft === 0 ? 'border-rose-500 bg-rose-500/10 text-rose-200' : timerAlert ? 'border-amber-500 bg-amber-500/10 text-amber-100' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100';
@@ -880,6 +884,7 @@ export default function App() {
     const code = generateRoomCode();
     const displayName = formatPlayerDisplayName(playerName.trim() || (user ? `Jogador ${user.uid.slice(0, 4)}` : 'Visitante'));
     const avatar = playerAvatar || '🧠';
+    const playerKey = user?.uid || `local-${displayName}`;
 
     if (!db || !user) {
       const fallbackRoom = {
@@ -889,7 +894,7 @@ export default function App() {
         timeLimit: competitionMinutes * 60,
         startedAt: null,
         players: {
-          [displayName]: { name: displayName, avatar, score: 0 }
+          [playerKey]: { uid: user?.uid || playerKey, name: displayName, avatar, score: 0, joinedAt: new Date().toISOString() }
         }
       };
       setRoomInfo(fallbackRoom);
@@ -962,15 +967,23 @@ export default function App() {
       return;
     }
 
+    const updatedRoom = {
+      ...roomInfo,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+      timeLimit: competitionMinutes * 60
+    };
+
     if (db && user && roomInfo.hostUid === user.uid) {
       const roomRef = doc(db, 'artifacts', appId, 'rooms', roomInfo.code);
       await updateDoc(roomRef, {
         status: 'running',
-        startedAt: new Date().toISOString(),
-        timeLimit: competitionMinutes * 60
+        startedAt: updatedRoom.startedAt,
+        timeLimit: updatedRoom.timeLimit
       });
     }
 
+    setRoomInfo(updatedRoom);
     setTimeLeft(competitionMinutes * 60);
     setTimerRunning(true);
     setTimerAlert(false);
@@ -979,13 +992,23 @@ export default function App() {
 
   const pauseCompetition = async () => {
     setTimerRunning(false);
-    if (db && user && roomInfo?.hostUid === user.uid && roomInfo?.code) {
-      const roomRef = doc(db, 'artifacts', appId, 'rooms', roomInfo.code);
-      await updateDoc(roomRef, {
+    if (roomInfo) {
+      const updatedRoom = {
+        ...roomInfo,
         status: 'paused',
         timeLimit: timeLeft,
         startedAt: null
-      });
+      };
+      setRoomInfo(updatedRoom);
+
+      if (db && user && roomInfo.hostUid === user.uid && roomInfo.code) {
+        const roomRef = doc(db, 'artifacts', appId, 'rooms', roomInfo.code);
+        await updateDoc(roomRef, {
+          status: 'paused',
+          timeLimit: timeLeft,
+          startedAt: null
+        });
+      }
     }
   };
 
@@ -993,13 +1016,23 @@ export default function App() {
     setTimerRunning(false);
     setTimeLeft(competitionMinutes * 60);
     setTimerAlert(false);
-    if (db && user && roomInfo?.hostUid === user.uid && roomInfo?.code) {
-      const roomRef = doc(db, 'artifacts', appId, 'rooms', roomInfo.code);
-      await updateDoc(roomRef, {
+    if (roomInfo) {
+      const updatedRoom = {
+        ...roomInfo,
         status: 'lobby',
         startedAt: null,
         timeLimit: competitionMinutes * 60
-      });
+      };
+      setRoomInfo(updatedRoom);
+
+      if (db && user && roomInfo.hostUid === user.uid && roomInfo.code) {
+        const roomRef = doc(db, 'artifacts', appId, 'rooms', roomInfo.code);
+        await updateDoc(roomRef, {
+          status: 'lobby',
+          startedAt: null,
+          timeLimit: competitionMinutes * 60
+        });
+      }
     }
   };
 
@@ -1417,102 +1450,125 @@ export default function App() {
           <div className="h-full flex flex-col md:flex-row">
             <div className="w-full md:w-1/3 lg:w-1/4 border-r border-slate-800/50 bg-slate-900/30 overflow-y-auto flex flex-col p-6">
               <div className="mb-4">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {programTabOptions.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setProgramSubTab(tab.id)}
+                      className={`px-3 py-2 rounded-full text-xs font-bold transition-all ${programSubTab === tab.id ? 'bg-indigo-500 text-white border border-indigo-400' : 'bg-slate-950 text-slate-300 border border-slate-700 hover:border-slate-500'}`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
                 <span className="text-xs font-mono px-2 py-1 bg-black/50 rounded text-slate-300">PROGRAMAÇÃO - PROBLEMA {currentLevelId}</span>
               </div>
               <h2 className="text-2xl font-black text-white mb-2">{currentLevel.title}</h2>
               <p className="text-lg text-slate-200 font-medium mb-4">{currentLevel.missionGoal}</p>
               <p className="text-sm text-slate-400 mb-6">{currentLevel.description}</p>
 
-              <div className={`rounded-2xl border p-4 mb-4 transition-all ${timerTone}`}>
-                <div className={`flex items-center gap-2 font-bold text-sm mb-2 ${timerAccent}`}>
-                  <Clock3 className="w-4 h-4" /> Timer de competição
+              {programSubTab === 'desafios' && (
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 mb-4">
+                  <div className="text-sm text-slate-300 mb-2">Modo Desafios</div>
+                  <p className="text-xs text-slate-400">Resolva o problema atual usando o editor. Envie o código e veja o feedback do juiz automático.</p>
                 </div>
-                <div className="text-3xl font-black text-white mb-2 tracking-tight">{formatTime(timeLeft)}</div>
-                <div className="text-[11px] font-mono uppercase mb-3 opacity-90">
-                  {timeLeft === 0 ? 'Tempo esgotado — finalize a rodada.' : timerAlert ? 'Últimos minutos — pressione com foco.' : roomInfo?.status === 'running' ? 'Modo competição sincronizado.' : 'Modo competição ativo.'}
-                </div>
+              )}
 
-                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-3">
-                  <div className="text-[11px] font-mono text-cyan-300 uppercase mb-2">Sala multiplayer</div>
-                  <div className="flex flex-col gap-2">
-                    <div className="rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-300 flex items-center gap-2">
-                      <span className="text-lg">{playerAvatar}</span>
-                      <span className="font-bold text-white">{formatPlayerDisplayName(playerName)}</span>
+              {programSubTab === 'competicao' && (
+                <>
+                  <div className={`rounded-2xl border p-4 mb-4 transition-all ${timerTone}`}>
+                    <div className={`flex items-center gap-2 font-bold text-sm mb-2 ${timerAccent}`}>
+                      <Clock3 className="w-4 h-4" /> Timer de competição
                     </div>
-                    <button onClick={createCompetitionRoom} className="w-full py-2 rounded-lg bg-indigo-500 text-white font-bold text-xs">Criar sala</button>
-                    <div className="flex gap-2">
-                      <input
-                        value={roomCodeInput}
-                        onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                        placeholder="Código da sala"
-                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
-                      />
-                      <button onClick={joinCompetitionRoom} className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-bold text-xs border border-slate-700">Entrar</button>
+                    <div className="text-3xl font-black text-white mb-2 tracking-tight">{formatTime(timeLeft)}</div>
+                    <div className="text-[11px] font-mono uppercase mb-3 opacity-90">
+                      {timeLeft === 0 ? 'Tempo esgotado — finalize a rodada.' : timerAlert ? 'Últimos minutos — pressione com foco.' : roomInfo?.status === 'running' ? 'Modo competição sincronizado.' : 'Modo competição ativo.'}
                     </div>
-                    {roomInfo?.code && (
-                      <div className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-300">
-                        Sala: <span className="font-bold text-cyan-300">{roomInfo.code}</span>
-                        {roomInfo.players && <span className="ml-2">• {Object.keys(roomInfo.players).length} jogador(es)</span>}
+
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-3">
+                      <div className="text-[11px] font-mono text-cyan-300 uppercase mb-2">Sala multiplayer</div>
+                      <div className="flex flex-col gap-2">
+                        <div className="rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-xs text-slate-300 flex items-center gap-2">
+                          <span className="text-lg">{playerAvatar}</span>
+                          <span className="font-bold text-white">{formatPlayerDisplayName(playerName)}</span>
+                        </div>
+                        <button onClick={createCompetitionRoom} className="w-full py-2 rounded-lg bg-indigo-500 text-white font-bold text-xs">Criar sala</button>
+                        <div className="flex gap-2">
+                          <input
+                            value={roomCodeInput}
+                            onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+                            placeholder="Código da sala"
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                          />
+                          <button onClick={joinCompetitionRoom} className="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 font-bold text-xs border border-slate-700">Entrar</button>
+                        </div>
+                        {roomInfo?.code && (
+                          <div className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-300">
+                            Sala: <span className="font-bold text-cyan-300">{roomInfo.code}</span>
+                            {roomInfo.players && <span className="ml-2">• {Object.keys(roomInfo.players).length} jogador(es)</span>}
+                          </div>
+                        )}
+                        {roomMessage && <div className="text-[11px] text-amber-200">{roomMessage}</div>}
+                      </div>
+                    </div>
+
+                    {roomInfo?.players && (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-3">
+                        <div className="text-[11px] font-mono text-emerald-300 uppercase mb-2">Placar de colocados</div>
+                        <div className="space-y-2">
+                          {roomRanking.map((player, index) => (
+                            <div key={player.uid || player.name || index} className="flex items-center justify-between text-xs rounded-lg bg-slate-900 px-3 py-2">
+                              <span className="flex items-center gap-2">
+                                <span className="text-base">{player.avatar || '🧠'}</span>
+                                <span className={`font-bold ${podiumClass[index] || 'text-slate-300'}`}>#{index + 1} {player.name}</span>
+                              </span>
+                              <span className="font-bold text-emerald-300">{player.score || 0} pts</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    {roomMessage && <div className="text-[11px] text-amber-200">{roomMessage}</div>}
-                  </div>
-                </div>
 
-                {roomInfo?.players && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-3">
-                    <div className="text-[11px] font-mono text-emerald-300 uppercase mb-2">Placar de colocados</div>
-                    <div className="space-y-2">
-                      {roomRanking.map((player, index) => (
-                        <div key={player.uid || player.name || index} className="flex items-center justify-between text-xs rounded-lg bg-slate-900 px-3 py-2">
-                          <span className="flex items-center gap-2">
-                            <span className="text-base">{player.avatar || '🧠'}</span>
-                            <span className={`font-bold ${podiumClass[index] || 'text-slate-300'}`}>#{index + 1} {player.name}</span>
-                          </span>
-                          <span className="font-bold text-emerald-300">{player.score || 0} pts</span>
+                    {records.length > 0 && (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-3">
+                        <div className="text-[11px] font-mono text-amber-300 uppercase mb-2">Records locais</div>
+                        <div className="space-y-2">
+                          {records.slice(0, 5).map((record, index) => (
+                            <div key={`${record.player}-${record.createdAt}-${index}`} className="flex items-center justify-between text-xs rounded-lg bg-slate-900 px-3 py-2">
+                              <span className="text-slate-300">{index + 1}. {record.player} · {record.room}</span>
+                              <span className="font-bold text-amber-300">{record.score} pts</span>
+                            </div>
+                          ))}
                         </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {[15, 30, 45, 60].map((minutes) => (
+                        <button
+                          key={minutes}
+                          onClick={() => setCompetitionMinutes(minutes)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${competitionMinutes === minutes ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 text-slate-300 hover:border-cyan-500'}`}
+                        >
+                          {minutes} min
+                        </button>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {records.length > 0 && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-3">
-                    <div className="text-[11px] font-mono text-amber-300 uppercase mb-2">Records locais</div>
-                    <div className="space-y-2">
-                      {records.slice(0, 5).map((record, index) => (
-                        <div key={`${record.player}-${record.createdAt}-${index}`} className="flex items-center justify-between text-xs rounded-lg bg-slate-900 px-3 py-2">
-                          <span className="text-slate-300">{index + 1}. {record.player} · {record.room}</span>
-                          <span className="font-bold text-amber-300">{record.score} pts</span>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={startCompetition} className="py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs">Iniciar</button>
+                      <button onClick={pauseCompetition} className="py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Pausar</button>
+                      <button onClick={resetCompetition} className="py-2 rounded-xl bg-rose-500 text-white font-bold text-xs">Reset</button>
                     </div>
                   </div>
-                )}
 
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {[15, 30, 45, 60].map((minutes) => (
-                    <button
-                      key={minutes}
-                      onClick={() => setCompetitionMinutes(minutes)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${competitionMinutes === minutes ? 'bg-cyan-500 text-slate-950 border-cyan-400' : 'border-slate-700 text-slate-300 hover:border-cyan-500'}`}
-                    >
-                      {minutes} min
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button onClick={startCompetition} className="py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs">Iniciar</button>
-                  <button onClick={pauseCompetition} className="py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Pausar</button>
-                  <button onClick={resetCompetition} className="py-2 rounded-xl bg-rose-500 text-white font-bold text-xs">Reset</button>
-                </div>
-              </div>
-
-              <div className="mt-auto bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-                <p className="text-xs text-amber-200 font-mono">
-                  {language === 'cpp' ? currentLevel.syntaxTipCpp : currentLevel.syntaxTipPython}
-                </p>
-              </div>
+                  <div className="mt-auto bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+                    <p className="text-xs text-amber-200 font-mono">
+                      {language === 'cpp' ? currentLevel.syntaxTipCpp : currentLevel.syntaxTipPython}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex-1 flex flex-col h-full bg-[#020408] p-4 md:p-6 gap-4">
