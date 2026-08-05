@@ -594,6 +594,7 @@ export default function App() {
   const [iniciacaoCustomSelected, setIniciacaoCustomSelected] = useState(false);
   const [iniciacaoCustomMinutes, setIniciacaoCustomMinutes] = useState('');
   const [iniciacaoCustomError, setIniciacaoCustomError] = useState('');
+  const [hideIniciacaoCorrectness, setHideIniciacaoCorrectness] = useState(false);
   const [iniciacaoTimeLeft, setIniciacaoTimeLeft] = useState(20 * 60);
   const [iniciacaoTimerRunning, setIniciacaoTimerRunning] = useState(false);
   const [iniciacaoTimerAlert, setIniciacaoTimerAlert] = useState(false);
@@ -613,6 +614,11 @@ export default function App() {
   const [records, setRecords] = useState([]);
   const [bestRoomPlacement, setBestRoomPlacement] = useState(99);
   const [bestRoomScore, setBestRoomScore] = useState(0);
+  const [homeChecklist, setHomeChecklist] = useState({
+    iniciacao: false,
+    programacao: false,
+    regulamento: false
+  });
 
   const seededShuffle = (items, seed) => {
     const copy = [...items];
@@ -753,6 +759,21 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem('obi-quest-best-room-score', String(bestRoomScore));
   }, [bestRoomScore]);
+
+  useEffect(() => {
+    const storedChecklist = window.localStorage.getItem('obi-quest-checklist');
+    if (storedChecklist) {
+      try {
+        setHomeChecklist(JSON.parse(storedChecklist));
+      } catch (error) {
+        console.warn('Falha ao carregar checklist do localStorage', error);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('obi-quest-checklist', JSON.stringify(homeChecklist));
+  }, [homeChecklist]);
 
   useEffect(() => {
     if (!user || !db) {
@@ -913,6 +934,26 @@ export default function App() {
     { id: 'competicao', label: 'Competição' }
   ];
   const formatPlayerDisplayName = (name = 'Visitante') => String(name || 'Visitante').trim() || 'Visitante';
+
+  useEffect(() => {
+    setHomeChecklist((prev) => ({
+      ...prev,
+      iniciacao: Object.keys(selectedIniciacaoAnswers).length >= 3
+    }));
+  }, [selectedIniciacaoAnswers]);
+
+  useEffect(() => {
+    setHomeChecklist((prev) => ({
+      ...prev,
+      programacao: isVictory || prev.programacao
+    }));
+  }, [isVictory]);
+
+  useEffect(() => {
+    if (activeTab === 'academy') {
+      setHomeChecklist((prev) => ({ ...prev, regulamento: true }));
+    }
+  }, [activeTab]);
 
   const timerTone = timeLeft === 0 ? 'border-rose-500 bg-rose-500/10 text-rose-200' : timerAlert ? 'border-amber-500 bg-amber-500/10 text-amber-100' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-100';
   const timerAccent = timeLeft === 0 ? 'text-rose-400' : timerAlert ? 'text-amber-300' : 'text-cyan-300';
@@ -1250,6 +1291,13 @@ export default function App() {
                   Treine lógica, raciocínio e programação em uma experiência completa, com módulos de Iniciação, desafios de Programação e um ambiente de competição mais profissional.
                 </p>
 
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 mb-6">
+                  <div className="text-xs font-mono uppercase text-emerald-300 mb-2">Dica de preparação</div>
+                  <p className="text-sm text-slate-300 leading-relaxed">
+                    Comece pelos problemas mais simples, mantenha a leitura do enunciado precisa e revise o que errou para melhorar em sequência.
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
                   <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/10 p-4">
                     <div className="text-xs font-mono uppercase text-indigo-300 mb-1">Iniciação</div>
@@ -1351,16 +1399,34 @@ export default function App() {
 
                 <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
                   <div className="text-xs font-mono uppercase text-cyan-300 mb-2">Checklist</div>
-                  <div className="space-y-2 text-sm text-slate-300">
-                    <div>1. Resolver 3 questões de iniciação.</div>
-                    <div>2. Completar um problema de programação.</div>
-                    <div>3. Revisar as regras do regulamento.</div>
+                  <div className="space-y-3 text-sm text-slate-300">
+                    {[{
+                      key: 'iniciacao',
+                      label: 'Resolver 3 questões de iniciação',
+                      completed: homeChecklist.iniciacao,
+                      hint: homeChecklist.iniciacao ? 'Concluído' : 'Selecione três respostas no módulo Iniciação.'
+                    }, {
+                      key: 'programacao',
+                      label: 'Completar um problema de programação',
+                      completed: homeChecklist.programacao,
+                      hint: homeChecklist.programacao ? 'Concluído' : 'Envie código aceito no modo Programação.'
+                    }, {
+                      key: 'regulamento',
+                      label: 'Revisar as regras do regulamento',
+                      completed: homeChecklist.regulamento,
+                      hint: homeChecklist.regulamento ? 'Concluído' : 'Abra a aba Regulamento.'
+                    }].map((item) => (
+                      <div key={item.key} className="flex items-start gap-3 rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3">
+                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${item.completed ? 'border-emerald-400 bg-emerald-500/20 text-emerald-300' : 'border-slate-700 text-slate-500'}`}>
+                          {item.completed ? '✓' : ''}
+                        </span>
+                        <div className="text-left">
+                          <div className="font-semibold text-slate-100">{item.label}</div>
+                          <div className="text-xs text-slate-500">{item.hint}</div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-                  <div className="text-xs font-mono uppercase text-emerald-300 mb-2">Dica de preparação</div>
-                  <p className="text-sm text-slate-300 leading-relaxed">Comece pelos problemas mais simples, mantenha a leitura do enunciado precisa e revise o que errou para melhorar em sequência.</p>
                 </div>
               </div>
             </div>
@@ -1387,9 +1453,9 @@ export default function App() {
                   <div className="text-xs uppercase tracking-[0.15em] mt-1 text-slate-400">{iniciacaoTimerStateLabel}</div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
-                  <button onClick={startIniciacao} className="w-full py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs">Iniciar</button>
-                  <button onClick={pauseIniciacao} className="w-full py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs">Pausar</button>
-                  <button onClick={resetIniciacao} className="w-full py-2 rounded-xl bg-rose-500 text-white font-bold text-xs">Reset</button>
+                  <button onClick={startIniciacao} className="w-full py-2 rounded-xl border border-emerald-500 text-emerald-500 font-bold text-xs bg-transparent hover:bg-emerald-500/10">Iniciar</button>
+                  <button onClick={pauseIniciacao} className="w-full py-2 rounded-xl border border-amber-500 text-amber-500 font-bold text-xs bg-transparent hover:bg-amber-500/10">Pausar</button>
+                  <button onClick={resetIniciacao} className="w-full py-2 rounded-xl border border-rose-500 text-rose-500 font-bold text-xs bg-transparent hover:bg-rose-500/10">Reset</button>
                 </div>
               </div>
 
@@ -1457,9 +1523,22 @@ export default function App() {
             </div>
 
             <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-300">
-              {isIniciacaoTimerActive
-                ? `O cronômetro está ativo. Você tem ${formatTime(iniciacaoTimeLeft)} para responder todas as perguntas.`
-                : 'Inicie o cronômetro para começar a responder. Enquanto estiver pausado ou zerado, as alternativas não podem ser selecionadas.'}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <span>{isIniciacaoTimerActive
+                  ? `O cronômetro está ativo. Você tem ${formatTime(iniciacaoTimeLeft)} para responder todas as perguntas.`
+                  : 'Inicie o cronômetro para começar a responder. Enquanto estiver pausado ou zerado, as alternativas não podem ser selecionadas.'}
+                </span>
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={hideIniciacaoCorrectness}
+                    onChange={(e) => setHideIniciacaoCorrectness(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  Ocultar correção imediata após responder
+                </label>
+              </div>
+              <div className="text-xs text-slate-500 mt-2">A resposta escolhida fica fixa e o feedback só aparece quando você terminar a rodada ou pausar o cronômetro.</div>
             </div>
 
             <div className="mb-4 flex flex-wrap gap-3">
@@ -1505,21 +1584,24 @@ export default function App() {
                       {q.options.map((opt, optIdx) => {
                         const isSelected = selectedAnswer === `${q.id}-${optIdx}`;
                         const isCorrectOption = optIdx === q.correct;
+                        const alreadyAnswered = Boolean(selectedAnswer);
                         const optionClassName = isSelected
-                          ? (isCorrectOption ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-rose-950/40 border-rose-500 text-rose-300')
-                          : isCorrectOption && selectedAnswer
-                            ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-200'
-                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-600';
+                          ? (hideIniciacaoCorrectness
+                              ? 'bg-slate-950 border-cyan-500 text-slate-200'
+                              : (isCorrectOption ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-rose-950/40 border-rose-500 text-rose-300'))
+                          : (selectedAnswer && !hideIniciacaoCorrectness && isCorrectOption
+                              ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-200'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-600');
 
                         return (
                           <button
                             key={optIdx}
                             onClick={() => {
-                              if (!isIniciacaoTimerActive) return;
+                              if (!isIniciacaoTimerActive || alreadyAnswered) return;
                               setSelectedIniciacaoAnswers(prev => ({ ...prev, [q.id]: `${q.id}-${optIdx}` }));
                             }}
-                            disabled={!isIniciacaoTimerActive}
-                            className={`p-4 rounded-xl border text-left font-mono text-sm transition-all ${optionClassName} ${!isIniciacaoTimerActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            disabled={!isIniciacaoTimerActive || alreadyAnswered}
+                            className={`p-4 rounded-xl border text-left font-mono text-sm transition-all ${optionClassName} ${( !isIniciacaoTimerActive || alreadyAnswered) ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             {opt}
                           </button>
@@ -1528,9 +1610,10 @@ export default function App() {
                     </div>
 
                     {selectedAnswer && (
-                      <div className={`mt-4 p-4 rounded-xl border text-sm ${isCorrectAnswer ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200' : 'bg-rose-950/20 border-rose-500/30 text-rose-200'}`}>
-                        <p className="font-bold mb-1">{isCorrectAnswer ? 'Resposta correta!' : 'Resposta registrada.'}</p>
-                        <p>{q.explanation}</p>
+                      <div className={`mt-4 p-4 rounded-xl border text-sm ${hideIniciacaoCorrectness ? 'bg-slate-950 border-slate-700 text-slate-200' : isCorrectAnswer ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200' : 'bg-rose-950/20 border-rose-500/30 text-rose-200'}`}>
+                        <p className="font-bold mb-1">{hideIniciacaoCorrectness ? 'Resposta registrada.' : isCorrectAnswer ? 'Resposta correta!' : 'Resposta registrada.'}</p>
+                        {!hideIniciacaoCorrectness && <p>{q.explanation}</p>}
+                        {hideIniciacaoCorrectness && <p className="text-xs text-slate-500">A correção imediata está oculta.</p>}
                       </div>
                     )}
                     {!isIniciacaoTimerActive && (
